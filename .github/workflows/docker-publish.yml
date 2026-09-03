@@ -77,13 +77,25 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
 
+      # Values come in as env vars rather than ${{ }} interpolated straight into
+      # the script: it keeps the shell from ever parsing them as code, and it
+      # sidesteps quoting problems with the multi-line tag list.
       - name: Summary
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          EVENT: ${{ github.event_name }}
         run: |
           {
             echo "### Pushed"
             echo '```'
-            echo "${{ steps.meta.outputs.tags }}"
+            echo "${TAGS}"
             echo '```'
-            echo "yt-dlp in this image: \`$(grep yt-dlp requirements.txt)\`"
-            [ "${{ github.event_name }}" = "schedule" ] && echo "_Weekly no-cache rebuild._"
+            echo "yt-dlp spec: \`$(grep -i 'yt-dlp' requirements.txt || echo 'not found')\`"
+            # `if` rather than `[ … ] && echo …`: a trailing test that evaluates
+            # false makes the whole block exit 1 under `set -e`, which fails the
+            # step even though the image pushed fine.
+            if [ "${EVENT}" = "schedule" ]; then
+              echo ""
+              echo "_Weekly no-cache rebuild — picks up the newest yt-dlp._"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
