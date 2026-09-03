@@ -1,0 +1,60 @@
+{% import "partials/video_card.html" as vc %}
+<section class="panel" id="results-panel">
+  <div class="panel-head">
+    <div>
+      <h2>{{ heading }}</h2>
+      <p class="muted">{{ subheading }}</p>
+    </div>
+    <span class="kind kind-{{ kind }}">{{ kind }}</span>
+  </div>
+
+  {% if auto_summary %}
+    <p class="note note-ok">
+      {% if auto_summary.queued %}Queued this video for download.
+      {% else %}Already in your library or queue — nothing new was added.{% endif %}
+    </p>
+  {% endif %}
+
+  {% if playlist_url %}
+    <p class="note note-info">
+      This link is also part of a playlist.
+      <button class="linkbtn" type="button"
+              onclick="document.getElementById('url-input').value='{{ playlist_url }}';document.getElementById('analyze-form').requestSubmit();">
+        Analyze the whole playlist instead →
+      </button>
+    </p>
+  {% endif %}
+
+  {% if videos %}
+  <form id="select-form" hx-post="/enqueue" hx-target="#toast-host" hx-swap="afterbegin">
+    <input type="hidden" name="token" value="{{ token }}">
+
+    <div class="toolbar">
+      <button type="button" class="btn btn-ghost" data-select="all">Select all</button>
+      <button type="button" class="btn btn-ghost" data-select="none">Select none</button>
+      <button type="button" class="btn btn-ghost" data-select="invert">Invert</button>
+      <span class="grow"></span>
+      <span class="muted" id="sel-count"></span>
+      <button type="submit" class="btn btn-primary">Download selected</button>
+    </div>
+
+    <div class="grid" id="results-grid">
+      {% for v in videos %}{{ vc.card(v, states, checked=(kind == 'video')) }}{% endfor %}
+    </div>
+  </form>
+  {% else %}
+    <p class="note note-warn">No videos found at that URL.</p>
+  {% endif %}
+</section>
+
+{% if channel_url %}
+<div id="channel-panel"
+     hx-get="/channel?url={{ channel_url | urlencode }}&exclude={{ channel_exclude or '' }}&name={{ channel_name | urlencode }}"
+     hx-trigger="load"
+     hx-swap="outerHTML">
+  <section class="panel">
+    <div class="panel-head"><h2>More from {{ channel_name }}</h2></div>
+    <p class="muted loading">Fetching the channel's recent uploads…</p>
+  </section>
+</div>
+{% endif %}

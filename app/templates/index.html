@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+
+<section class="panel hero">
+  <h1>Paste a YouTube link</h1>
+  <p class="muted">Single video, playlist, or channel — it works out which and asks the
+     right question.</p>
+
+  <form id="analyze-form" hx-post="/analyze" hx-target="#results" hx-swap="innerHTML"
+        hx-indicator="#analyze-spin">
+    <div class="row">
+      <input id="url-input" name="url" type="text" autocomplete="off" required
+             placeholder="https://www.youtube.com/watch?v=…  ·  /playlist?list=…  ·  /@channel"
+             class="input input-lg">
+      <button type="submit" class="btn btn-primary btn-lg">
+        Analyze <span id="analyze-spin" class="spin htmx-indicator"></span>
+      </button>
+    </div>
+    <div class="row row-sub">
+      <label class="field">
+        <span>How many to list</span>
+        <input name="limit" type="text" value="50" class="input input-sm"
+               placeholder="50 or 'all'" list="limit-presets">
+        <datalist id="limit-presets">
+          <option value="10"><option value="25"><option value="50">
+          <option value="100"><option value="all">
+        </datalist>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="auto_download" value="1" checked>
+        <span>For a single video, start the download right away</span>
+      </label>
+    </div>
+  </form>
+</section>
+
+<div id="results"></div>
+
+{% include "partials/queue.html" %}
+
+{% endblock %}

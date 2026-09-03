@@ -1,0 +1,29 @@
+# Shell scripts MUST keep LF endings. If git checks entrypoint.sh out with
+# CRLF on Windows and you commit that, the image builds fine but dies at
+# startup with:
+#     exec /entrypoint.sh: no such file or directory
+# ...because the kernel reads the shebang as "/usr/bin/env bash\r".
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# PowerShell is happier with CRLF on Windows.
+*.ps1           text eol=crlf
+
+# Everything else: normalise to LF in the repo, let git decide on checkout.
+*.py            text
+*.html          text
+*.css           text
+*.js            text
+*.md            text
+*.xml           text
+.env.example    text
+.env.*.example  text
+
+# Binary — never touch these.
+*.png           binary
+*.jpg           binary
+*.svg           text
+*.gz            binary
+*.zip           binary

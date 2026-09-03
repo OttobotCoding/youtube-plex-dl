@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+# local test library + database (created by run-local.sh / compose defaults)
+data/
+config/
+downloads/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+app/static/htmx.min.js

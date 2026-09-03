@@ -1,0 +1,69 @@
+<div id="queue-panel"
+     hx-get="/partials/queue"
+     hx-trigger="every {{ 1500 if active else 4000 }}ms"
+     hx-swap="outerHTML">
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>Queue</h2>
+      <p class="muted">
+        {{ counts.get('downloading', 0) }} downloading ·
+        {{ counts.get('queued', 0) }} waiting ·
+        {{ counts.get('completed', 0) }} in library
+      </p>
+    </div>
+    <button class="btn btn-ghost" hx-post="/queue/clear"
+            hx-target="#toast-host" hx-swap="afterbegin">Clear failed</button>
+  </div>
+
+  {% if active %}
+    <ul class="qlist">
+      {% for r in active %}
+      <li class="qitem">
+        <img class="qthumb" src="{{ r['thumbnail'] or '' }}" alt="" loading="lazy"
+             referrerpolicy="no-referrer">
+        <div class="qbody">
+          <div class="qtitle">{{ r['title'] }}</div>
+          <div class="qmeta">
+            {{ r['channel_name'] or '' }}
+            {%- if r['episode_code'] %} · {{ r['episode_code'] }}{% endif %}
+            {%- if r['speed'] %} · {{ r['speed'] }}{% endif %}
+            {%- if r['eta'] %} · {{ r['eta'] }}{% endif %}
+          </div>
+          <div class="bar"><span style="width: {{ r['progress'] or 0 }}%"></span></div>
+        </div>
+        <div class="qpct">
+          {% if r['status'] == 'queued' %}waiting{% else %}{{ '%.0f' % (r['progress'] or 0) }}%{% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted empty">Queue is empty.</p>
+  {% endif %}
+
+  {% if recent %}
+    <h3 class="subhead">Recently finished</h3>
+    <ul class="rlist">
+      {% for r in recent %}
+      <li class="ritem ritem-{{ r['status'] }}">
+        <span class="dot"></span>
+        <div class="rbody">
+          <div class="rtitle">{{ r['title'] }}</div>
+          <div class="rmeta">
+            {{ r['channel_name'] or '' }}
+            {%- if r['episode_code'] %} · {{ r['episode_code'] }}{% endif %}
+            {%- if r['filesize'] %} · {{ r['filesize'] | filesize }}{% endif %}
+            {%- if r['error'] %} · <span class="err">{{ r['error'] }}</span>{% endif %}
+          </div>
+        </div>
+        {% if r['status'] == 'failed' %}
+        <button class="btn btn-tiny" hx-post="/retry/{{ r['video_id'] }}"
+                hx-target="#toast-host" hx-swap="afterbegin">Retry</button>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</section>
+</div>

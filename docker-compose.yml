@@ -1,0 +1,105 @@
+services:
+  youtube-plex-dl:
+    # Set IMAGE in .env to your GHCR path, e.g.
+    #   IMAGE=ghcr.io/msmigiel22/youtube-plex-dl:latest
+    # Unraid:  docker compose pull && docker compose up -d   (pulls, never builds)
+    # Laptop:  docker compose up --build                     (builds locally)
+    image: ${IMAGE:-youtube-plex-dl:local}
+    build: .
+    container_name: youtube-plex-dl
+    restart: unless-stopped
+
+    labels:
+      # Lets Watchtower update THIS container without touching anything else
+      # on the array (it runs with WATCHTOWER_LABEL_ENABLE=true).
+      com.centurylinklabs.watchtower.enable: "true"
+
+    # Everything host-specific comes from .env, so this file is identical on
+    # your laptop and on Unraid. See .env.local.example / .env.unraid.example.
+    ports:
+      - "${WEBUI_PORT:-8080}:8080"
+
+    volumes:
+      # Left side = host path (from .env), right side = fixed container path.
+      # MEDIA_PATH must be the ROOT of the Plex "TV Shows" library — i.e. Plex
+      # must scan this same host folder. Defaults are local test folders.
+      - ${MEDIA_PATH:-./data/downloads}:/downloads
+      - ${APPDATA_PATH:-./data/config}:/config
+
+    environment:
+      # --- ownership --------------------------------------------------------
+      # Unraid: 99/100 (nobody/users). Locally: set to your own id in .env,
+      # otherwise ./data ends up owned by uid 99.
+      PUID: "${PUID:-99}"
+      PGID: "${PGID:-100}"
+      UMASK: "${UMASK:-002}"
+      TZ: "${TZ:-America/Denver}"
+
+      # --- app --------------------------------------------------------------
+      PORT: "8080"                                   # container-side, don't change
+      APP_TITLE: "${APP_TITLE:-YouTube → Plex}"
+
+      # --- Plex naming ------------------------------------------------------
+      # single -> Channel/Season 01/Channel - S01E07 - Title (2026-08-29).mp4
+      # year   -> Channel/Season 2026/Channel - S2026E0829 - Title (2026-08-29).mp4
+      SEASON_MODE: "${SEASON_MODE:-single}"
+      SEASON_NUMBER: "${SEASON_NUMBER:-1}"
+      TITLE_INCLUDE_DATE: "${TITLE_INCLUDE_DATE:-true}"
+
+      # --- download behaviour ----------------------------------------------
+      MERGE_FORMAT: "${MERGE_FORMAT:-mp4}"           # mp4 (best direct-play) or mkv
+      MAX_HEIGHT: "${MAX_HEIGHT:-0}"                 # 0 = no cap; 360 is handy for testing
+      CONCURRENCY: "${CONCURRENCY:-2}"
+      EMBED_METADATA: "${EMBED_METADATA:-true}"
+      EMBED_THUMBNAIL: "${EMBED_THUMBNAIL:-true}"
+      WRITE_THUMBNAIL: "${WRITE_THUMBNAIL:-true}"
+      WRITE_CHANNEL_POSTER: "${WRITE_CHANNEL_POSTER:-true}"
+      WRITE_NFO: "${WRITE_NFO:-true}"
+      SUBTITLES: "${SUBTITLES:-true}"
+      SUBTITLE_LANGS: "${SUBTITLE_LANGS:-en.*}"
+      SUBTITLE_AUTO: "${SUBTITLE_AUTO:-true}"
+      EMBED_SUBTITLES: "${EMBED_SUBTITLES:-true}"
+      WRITE_SUBTITLE_FILES: "${WRITE_SUBTITLE_FILES:-true}"
+      SPONSORBLOCK: "${SPONSORBLOCK:-false}"
+      RATE_LIMIT: "${RATE_LIMIT:-}"
+      COOKIES_FILE: "${COOKIES_FILE:-}"
+
+      # --- email notifications ---------------------------------------------
+      NOTIFY_EMAIL: "${NOTIFY_EMAIL:-false}"         # true once SMTP is filled in
+      NOTIFY_MODE: "${NOTIFY_MODE:-batch}"           # batch = one summary; each = per video
+      NOTIFY_ON_FAILURE: "${NOTIFY_ON_FAILURE:-true}"
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_TLS: "${SMTP_TLS:-true}"
+      SMTP_SSL: "${SMTP_SSL:-false}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-}"
+      SMTP_TO: "${SMTP_TO:-}"
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Optional auto-updater ──────────────────────────────────────────────
+  # Opt in explicitly:  docker compose --profile autoupdate up -d
+  # Only touches containers labelled above, so nothing else on the array is
+  # at risk. Note it mounts the Docker socket, which is effectively root on
+  # the host — if you'd rather not, use scripts/unraid-update.sh on a cron
+  # instead (see DEPLOY.md), which does the same job with no extra container.
+  watchtower:
+    image: containrrr/watchtower:latest
+    profiles: ["autoupdate"]
+    container_name: youtube-plex-dl-watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"   # only labelled containers
+      WATCHTOWER_CLEANUP: "true"        # delete the superseded image
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+      WATCHTOWER_POLL_INTERVAL: "${WATCHTOWER_POLL_INTERVAL:-86400}"  # daily
+      TZ: "${TZ:-America/Denver}"

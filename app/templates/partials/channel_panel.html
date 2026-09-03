@@ -1,0 +1,29 @@
+{% import "partials/video_card.html" as vc %}
+<div id="channel-panel">
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>More from {{ channel_name }}</h2>
+      <p class="muted">Latest uploads — tick any you also want.</p>
+    </div>
+    <span class="kind kind-channel">channel</span>
+  </div>
+
+  {% if videos %}
+  <form class="select-form" hx-post="/enqueue" hx-target="#toast-host" hx-swap="afterbegin">
+    <input type="hidden" name="token" value="{{ token }}">
+    <div class="toolbar">
+      <button type="button" class="btn btn-ghost" data-select="all">Select all</button>
+      <button type="button" class="btn btn-ghost" data-select="none">Select none</button>
+      <span class="grow"></span>
+      <button type="submit" class="btn btn-primary">Download selected</button>
+    </div>
+    <div class="grid">
+      {% for v in videos %}{{ vc.card(v, states, checked=False) }}{% endfor %}
+    </div>
+  </form>
+  {% else %}
+    <p class="note note-warn">Couldn't read that channel's uploads.</p>
+  {% endif %}
+</section>
+</div>

@@ -1,0 +1,16 @@
+.git
+.gitignore
+__pycache__/
+*.pyc
+*.sqlite3
+.venv/
+venv/
+data/
+downloads/
+config/
+.env
+.env.*
+README.md
+docker-compose.yml
+unraid-template.xml
+scripts/

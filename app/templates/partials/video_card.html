@@ -1,0 +1,24 @@
+{% macro card(v, states, checked=True) -%}
+{% set state = states.get(v.video_id) %}
+{% set done = state == 'completed' %}
+{% set busy = state in ('queued', 'downloading') %}
+<label class="card {{ 'card-done' if done else '' }}">
+  <input type="checkbox" name="video_ids" value="{{ v.video_id }}"
+         {% if checked and not done and not busy %}checked{% endif %}
+         {% if done or busy %}disabled{% endif %}>
+  <span class="card-check" aria-hidden="true"></span>
+  <span class="thumb">
+    <img loading="lazy" src="{{ v.thumbnail }}" alt="" referrerpolicy="no-referrer">
+    <span class="dur">{{ v.duration | duration }}</span>
+    {% if done %}<span class="badge badge-done">In library</span>
+    {% elif busy %}<span class="badge badge-busy">{{ state }}</span>{% endif %}
+  </span>
+  <span class="card-body">
+    <span class="card-title" title="{{ v.title }}">{{ v.title }}</span>
+    <span class="card-meta">
+      {{ v.upload_date | pdate or 'date unknown' }}
+      {%- if v.view_count %} · {{ v.view_count | compact }} views{% endif %}
+    </span>
+  </span>
+</label>
+{%- endmacro %}

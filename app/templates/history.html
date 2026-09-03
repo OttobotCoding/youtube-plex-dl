@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="panel">
+  <div class="panel-head">
+    <div>
+      <h2>History</h2>
+      <p class="muted">{{ counts.get('completed', 0) }} completed ·
+        {{ counts.get('failed', 0) }} failed · {{ counts.get('total', 0) }} tracked</p>
+    </div>
+    <form method="get" action="/history" class="row">
+      <input class="input input-sm" type="text" name="q" value="{{ q }}"
+             placeholder="Search title or channel">
+      <button class="btn btn-ghost" type="submit">Search</button>
+    </form>
+  </div>
+
+  {% if rows %}
+  <div class="tablewrap">
+    <table class="table">
+      <thead>
+        <tr><th></th><th>Title</th><th>Channel</th><th>Episode</th>
+            <th>Uploaded</th><th>Size</th><th>File</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><span class="dot dot-{{ r['status'] }}" title="{{ r['status'] }}"></span></td>
+          <td class="cell-title">{{ r['title'] }}
+            {% if r['error'] %}<div class="err">{{ r['error'] }}</div>{% endif %}</td>
+          <td>{{ r['channel_name'] or '' }}</td>
+          <td><code>{{ r['episode_code'] or '' }}</code></td>
+          <td>{{ r['upload_date'] | pdate }}</td>
+          <td>{{ r['filesize'] | filesize }}</td>
+          <td class="cell-path"><code>{{ r['filepath'] or '' }}</code></td>
+          <td class="cell-actions">
+            {% if r['status'] == 'failed' %}
+            <button class="btn btn-tiny" hx-post="/retry/{{ r['video_id'] }}"
+                    hx-target="#toast-host" hx-swap="afterbegin">Retry</button>
+            {% elif r['status'] == 'completed' %}
+            <button class="btn btn-tiny btn-danger" hx-post="/forget/{{ r['video_id'] }}"
+                    hx-target="#toast-host" hx-swap="afterbegin"
+                    title="Forget so it can be downloaded again">Forget</button>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted empty">Nothing downloaded yet.</p>
+  {% endif %}
+</section>
+{% endblock %}

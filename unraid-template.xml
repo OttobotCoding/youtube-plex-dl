@@ -1,0 +1,87 @@
+<?xml version="1.0"?>
+<!--
+  Drop this file in /boot/config/plugins/dockerMan/templates-user/ on your
+  Unraid box (name it my-youtube-plex-dl.xml) and it will show up under
+  Docker → Add Container → Template. Or just use docker-compose.yml.
+-->
+<Container version="2">
+  <Name>youtube-plex-dl</Name>
+  <Repository>youtube-plex-dl:latest</Repository>
+  <Registry/>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project/>
+  <Overview>
+    Download YouTube videos, playlists and channels into a Plex-friendly
+    TV Shows layout (Channel / Season 01 / Channel - S01E01 - Title.mp4).
+    Web GUI with checkbox selection, live progress, SQLite history and
+    optional email notifications.
+  </Overview>
+  <Category>MediaApp:Video Downloaders:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/YOURNAME/youtube-plex-dl/main/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+
+  <Config Name="WebUI Port" Target="8080" Default="8080" Mode="tcp"
+          Description="Port for the web interface" Type="Port"
+          Display="always" Required="true" Mask="false">8080</Config>
+
+  <Config Name="Plex YouTube library" Target="/downloads"
+          Default="/mnt/user/media/YouTube" Mode="rw"
+          Description="ROOT of the Plex TV Shows library used for YouTube. Plex must scan this same host path."
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/YouTube</Config>
+
+  <Config Name="Appdata (database)" Target="/config"
+          Default="/mnt/user/appdata/youtube-plex-dl" Mode="rw"
+          Description="SQLite download history and optional cookies.txt"
+          Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/youtube-plex-dl</Config>
+
+  <Config Name="PUID" Target="PUID" Default="99" Description="User ID"
+          Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Description="Group ID"
+          Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+  <Config Name="UMASK" Target="UMASK" Default="002" Description="File creation mask"
+          Type="Variable" Display="advanced" Required="false" Mask="false">002</Config>
+
+  <Config Name="Season mode" Target="SEASON_MODE" Default="single"
+          Description="single = Season 01 with sequential episodes. year = Season 2026 with SxxxxEMMDD."
+          Type="Variable" Display="always" Required="false" Mask="false">single</Config>
+  <Config Name="Merge format" Target="MERGE_FORMAT" Default="mp4"
+          Description="mp4 or mkv" Type="Variable" Display="always"
+          Required="false" Mask="false">mp4</Config>
+  <Config Name="Max height" Target="MAX_HEIGHT" Default="0"
+          Description="0 = unlimited, or 1080 / 1440 / 2160"
+          Type="Variable" Display="always" Required="false" Mask="false">0</Config>
+  <Config Name="Concurrent downloads" Target="CONCURRENCY" Default="2"
+          Description="Parallel yt-dlp workers" Type="Variable"
+          Display="always" Required="false" Mask="false">2</Config>
+  <Config Name="Subtitles" Target="SUBTITLES" Default="true"
+          Description="Download and embed subtitles" Type="Variable"
+          Display="advanced" Required="false" Mask="false">true</Config>
+
+  <Config Name="Email notifications" Target="NOTIFY_EMAIL" Default="false"
+          Description="true to email a summary when downloads finish"
+          Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="SMTP host" Target="SMTP_HOST" Default="" Description="e.g. smtp.gmail.com"
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SMTP port" Target="SMTP_PORT" Default="587" Description="587 STARTTLS / 465 SSL"
+          Type="Variable" Display="advanced" Required="false" Mask="false">587</Config>
+  <Config Name="SMTP user" Target="SMTP_USER" Default="" Description="SMTP username"
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SMTP password" Target="SMTP_PASS" Default="" Description="App password"
+          Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Email from" Target="SMTP_FROM" Default="" Description="From address"
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Email to" Target="SMTP_TO" Default="" Description="Comma-separated recipients"
+          Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>
