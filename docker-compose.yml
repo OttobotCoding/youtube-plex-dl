@@ -10,10 +10,6 @@ services:
     restart: unless-stopped
 
     labels:
-      # Lets Watchtower update THIS container without touching anything else
-      # on the array (it runs with WATCHTOWER_LABEL_ENABLE=true).
-      com.centurylinklabs.watchtower.enable: "true"
-
       # --- Unraid Docker tab cosmetics -------------------------------------
       # Compose-managed containers take their icon and WebUI link from these
       # labels; unraid-template.xml is only read by the template installer.
@@ -92,23 +88,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
-
-  # ── Optional auto-updater ──────────────────────────────────────────────
-  # Opt in explicitly:  docker compose --profile autoupdate up -d
-  # Only touches containers labelled above, so nothing else on the array is
-  # at risk. Note it mounts the Docker socket, which is effectively root on
-  # the host — if you'd rather not, use scripts/unraid-update.sh on a cron
-  # instead (see DEPLOY.md), which does the same job with no extra container.
-  watchtower:
-    image: containrrr/watchtower:latest
-    profiles: ["autoupdate"]
-    container_name: youtube-plex-dl-watchtower
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    environment:
-      WATCHTOWER_LABEL_ENABLE: "true"   # only labelled containers
-      WATCHTOWER_CLEANUP: "true"        # delete the superseded image
-      WATCHTOWER_INCLUDE_RESTARTING: "true"
-      WATCHTOWER_POLL_INTERVAL: "${WATCHTOWER_POLL_INTERVAL:-86400}"  # daily
-      TZ: "${TZ:-America/Denver}"

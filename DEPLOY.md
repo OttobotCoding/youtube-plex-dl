@@ -377,7 +377,8 @@ Other providers work the same way. For implicit-TLS hosts on port 465, set
 
 ## Part 5 — Keep it updated
 
-Two ways. Both do the same job; pick one, don't run both.
+The scheduled script below is the whole mechanism — set it up once and updates
+land on their own.
 
 ### Option A — Scheduled script (recommended)
 
@@ -404,22 +405,10 @@ did. `--dry-run` reports without changing anything.
 No extra container, no Docker socket exposed, and it tells you if the container
 fails to come back healthy.
 
-### Option B — Watchtower
-
-Already defined in `docker-compose.yml` behind a profile, so it's opt-in:
-
-```bash
-docker compose --profile autoupdate up -d
-```
-
-It's scoped by label (`WATCHTOWER_LABEL_ENABLE=true`), so it will only ever
-touch this container — nothing else on your array is at risk.
-
-Two honest caveats. It mounts `/var/run/docker.sock`, which is effectively root
-on the host — fine for a container you built, but it's a real consideration.
-And upstream Watchtower has been quiet for a while; it works, but it isn't
-actively developed. Option A avoids both issues, which is why it's the
-recommendation.
+> Earlier versions of this project also shipped a Watchtower service behind a
+> compose profile. It was removed: it only ran if you explicitly opted in, it
+> needed the Docker socket mounted (effectively root on the host), and upstream
+> has been quiet for a while. The script above does the same job better.
 
 ### Updating the app itself
 
