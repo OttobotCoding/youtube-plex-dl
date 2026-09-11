@@ -75,6 +75,11 @@ class Config:
     # ---- discovery ---------------------------------------------------
     PROBE_LIMIT = _int("PROBE_LIMIT", 60)        # max entries pulled per probe
     CHANNEL_PANEL_LIMIT = _int("CHANNEL_PANEL_LIMIT", 24)
+    # Seconds before /analyze gives up and tells you, instead of spinning
+    # forever. Large channels page through YouTube 30 videos at a time, so
+    # "all" on a big channel legitimately takes minutes — raise this if you
+    # routinely list very large channels.
+    PROBE_TIMEOUT = _int("PROBE_TIMEOUT", 120)
 
     # ---- ownership (Unraid) -----------------------------------------
     PUID = _int("PUID", 99)

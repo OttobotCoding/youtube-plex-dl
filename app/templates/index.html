@@ -32,6 +32,12 @@
       </label>
     </div>
   </form>
+
+  <p class="note note-info" id="slow-hint" hidden>
+    Still working. Channels and long playlists are read 30 videos at a time, so
+    a large one takes a while — it will time out and tell you after
+    {{ config.PROBE_TIMEOUT }}s rather than hanging.
+  </p>
 </section>
 
 <div id="results"></div>

@@ -1,6 +1,7 @@
 """FastAPI app: routes + htmx partials."""
 from __future__ import annotations
 
+import inspect
 import logging
 import secrets
 import time
@@ -8,6 +9,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import anyio
 from fastapi import FastAPI, Form, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -27,6 +29,25 @@ BASE_DIR = Path(__file__).resolve().parent
 # token -> {"created": ts, "kind": str, "title": str, "videos": {video_id: meta}}
 _analyses: dict[str, dict[str, Any]] = {}
 _ANALYSIS_TTL = 60 * 60
+
+
+# anyio.to_thread.run_sync() waits for the worker thread even when the
+# surrounding cancel scope fires, so a fail_after() around a plain run_sync
+# does nothing until the call finishes on its own — the timeout would never
+# actually time out. This flag lets the scope abandon the thread and raise
+# immediately. Python can't kill a running thread, so the abandoned yt-dlp
+# call finishes in the background and its result is discarded.
+# anyio 4 spells the flag abandon_on_cancel; anyio 3 called it cancellable.
+_ABANDON_KW = (
+    "abandon_on_cancel"
+    if "abandon_on_cancel" in inspect.signature(anyio.to_thread.run_sync).parameters
+    else "cancellable"
+)
+
+
+async def _in_thread(func, *args):
+    """Run a blocking call in a thread an enclosing timeout can give up on."""
+    return await anyio.to_thread.run_sync(func, *args, **{_ABANDON_KW: True})
 
 
 def _prune_analyses() -> None:
@@ -158,15 +179,37 @@ async def analyze(
         return toast(request, str(exc), "error")
 
     limit_n = _parse_limit(limit)
+    started = time.monotonic()
+    log.info("Analyzing %s (%s, limit=%s)", target["url"], target["kind"], limit_n)
 
     try:
-        if target["kind"] == ytdlp_service.KIND_VIDEO:
-            payload = await _analyze_video(target, bool(auto_download))
-        else:
-            payload = await _analyze_collection(target, limit_n)
+        # A hard ceiling so the page always gets an answer. Channels page
+        # through YouTube 30 videos at a time, so a big one is genuinely slow.
+        with anyio.fail_after(config.PROBE_TIMEOUT):
+            if target["kind"] == ytdlp_service.KIND_VIDEO:
+                payload = await _analyze_video(target, bool(auto_download))
+            else:
+                payload = await _analyze_collection(target, limit_n)
+    except TimeoutError:
+        log.warning("Analyze timed out after %ss: %s",
+                    config.PROBE_TIMEOUT, target["url"])
+        return toast(
+            request,
+            f"Timed out after {config.PROBE_TIMEOUT}s reading that "
+            f"{target['kind']}. Try a smaller count than "
+            f"{'all' if limit_n >= 5000 else limit_n}, or raise PROBE_TIMEOUT.",
+            "warn")
     except ytdlp_service.ProbeError as exc:
+        log.warning("Probe failed for %s: %s", target["url"], exc)
         return toast(request, f"yt-dlp could not read that URL: {exc}", "error")
+    except Exception as exc:  # noqa: BLE001
+        # Without this the response is a 500, and htmx ignores non-2xx by
+        # default — the page would just sit there showing nothing at all.
+        log.exception("Analyze crashed for %s", target["url"])
+        return toast(request, f"{type(exc).__name__}: {exc}"[:300], "error")
 
+    log.info("Analyzed %s in %.1fs — %d video(s)",
+             target["url"], time.monotonic() - started, len(payload["videos"]))
     return render(request, "partials/results.html", payload)
 
 
@@ -181,8 +224,7 @@ def _parse_limit(raw: str) -> int:
 
 
 async def _analyze_video(target: dict, auto_download: bool) -> dict[str, Any]:
-    import anyio
-    meta = await anyio.to_thread.run_sync(ytdlp_service.probe_video, target["url"])
+    meta = await _in_thread(ytdlp_service.probe_video, target["url"])
 
     token = _store([meta], kind="video", title=meta["title"])
     summary = None
@@ -206,10 +248,7 @@ async def _analyze_video(target: dict, auto_download: bool) -> dict[str, Any]:
 
 
 async def _analyze_collection(target: dict, limit_n: int) -> dict[str, Any]:
-    import anyio
-    result = await anyio.to_thread.run_sync(
-        ytdlp_service.probe_collection, target["url"], limit_n
-    )
+    result = await _in_thread(ytdlp_service.probe_collection, target["url"], limit_n)
     videos = result["videos"]
     token = _store(videos, kind=result["kind"], title=result["title"])
     return {
@@ -249,10 +288,17 @@ async def channel_panel(request: Request, url: str = Query(""),
                         exclude: str = Query(""), name: str = Query("")):
     if not url:
         return HTMLResponse("")
-    import anyio
-    videos = await anyio.to_thread.run_sync(
-        ytdlp_service.channel_recent, url, config.CHANNEL_PANEL_LIMIT, exclude or None
-    )
+    try:
+        with anyio.fail_after(config.PROBE_TIMEOUT):
+            videos = await _in_thread(
+                ytdlp_service.channel_recent, url,
+                config.CHANNEL_PANEL_LIMIT, exclude or None,
+            )
+    except Exception as exc:  # noqa: BLE001 — TimeoutError included
+        # This panel is a bonus, never the point of the request — degrade to an
+        # empty one rather than 500ing and leaving a spinner on screen forever.
+        log.warning("Channel panel failed for %s: %s", url, exc)
+        videos = []
     token = _store(videos, kind="channel", title=name or "Channel")
     return render(request, "partials/channel_panel.html", {
         "videos": videos,
@@ -331,7 +377,6 @@ async def email_test(request: Request):
     if not config.email_ready():
         return toast(request, "SMTP is not configured (set SMTP_HOST, SMTP_TO, "
                               "SMTP_FROM and NOTIFY_EMAIL=true).", "warn")
-    import anyio
     ok = await anyio.to_thread.run_sync(notify.send_test)
     return toast(request, "Test email sent." if ok else
                  "Send failed — check the container log.", "ok" if ok else "error")
