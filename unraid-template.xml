@@ -23,7 +23,7 @@
   <Category>MediaApp:Video Downloaders:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL/>
-  <Icon>https://raw.githubusercontent.com/YOURNAME/youtube-plex-dl/main/icon.png</Icon>
+  <Icon>http://[IP]:[PORT:8080]/static/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>

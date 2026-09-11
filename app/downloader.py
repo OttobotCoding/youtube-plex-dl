@@ -267,6 +267,11 @@ def _download_opts(outtmpl: str, row_id: int) -> dict[str, Any]:
         "windowsfilenames": True,
         "trim_file_name": 200,
         "overwrites": False,
+        # Keep yt-dlp's player-JS cache out of $HOME, which may not exist for
+        # the uid we dropped to. Deliberately NOT setting paths['temp'] here:
+        # that would stage entire downloads in the scratch dir and then move
+        # them across volumes, turning every save into a full extra copy.
+        "cachedir": str(config.temp_dir() / "yt-dlp-cache"),
         "postprocessor_args": {"thumbnailsconvertor+ffmpeg_o": ["-c:v", "mjpeg", "-vf",
                                                                 "crop=ih*16/9:ih"]},
     }

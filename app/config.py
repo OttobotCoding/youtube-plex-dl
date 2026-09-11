@@ -5,6 +5,7 @@ Every value here can be overridden from docker-compose / the Unraid template.
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 
 
@@ -34,6 +35,9 @@ class Config:
     OUTPUT_DIR = Path(_str("OUTPUT_DIR", "/downloads"))
     # DB + logs. Map to appdata on Unraid.
     CONFIG_DIR = Path(_str("CONFIG_DIR", "/config"))
+    # Scratch space for small temp files. Defaults to a folder under CONFIG_DIR
+    # because that one is guaranteed writable by the app's uid — see temp_dir().
+    TEMP_DIR = _str("TEMP_DIR", "")
 
     # ---- server ------------------------------------------------------
     PORT = _int("PORT", 8080)
@@ -108,9 +112,61 @@ class Config:
             and (self.SMTP_FROM or self.SMTP_USER)
         )
 
+    def temp_dir(self) -> Path:
+        """Where small scratch files go.
+
+        Defaults under CONFIG_DIR rather than /tmp because CONFIG_DIR is a
+        volume the entrypoint chowns to PUID:PGID, so it is writable whatever
+        uid we end up as. Only tiny files land here (yt-dlp's format probes and
+        its player cache) — actual downloads still go straight to OUTPUT_DIR.
+        """
+        return Path(self.TEMP_DIR) if self.TEMP_DIR else self.CONFIG_DIR / "tmp"
+
     def ensure_dirs(self) -> None:
+        # Resolve to absolute before anything chdirs (see use_writable_cwd).
+        self.OUTPUT_DIR = self.OUTPUT_DIR.expanduser().resolve()
+        self.CONFIG_DIR = self.CONFIG_DIR.expanduser().resolve()
         self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         self.CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+        tmp = self.temp_dir()
+        try:
+            tmp.mkdir(parents=True, exist_ok=True)
+            probe = tmp / ".write-test"
+            probe.write_text("ok", encoding="utf-8")
+            probe.unlink()
+            tempfile.tempdir = str(tmp)   # for callers that pass dir=None
+        except OSError:
+            tempfile.tempdir = None
+
+    def use_writable_cwd(self) -> Path | None:
+        """Move the process into a directory it can write to.
+
+        yt-dlp's _check_formats() creates a probe file with
+
+            dir = self.get_output_path('temp')          # '' with no `paths`
+            tempfile.NamedTemporaryFile(..., dir=dir or None)
+
+        and `get_output_path` runs that empty string through
+        `sanitize_path(path, force=windowsfilenames)`. We set
+        `windowsfilenames` so titles stay safe on SMB shares — and with
+        force=True, sanitize_path('') returns '.' rather than ''. '.' is
+        truthy, so yt-dlp passes an explicit dir of '.', i.e. THE CURRENT
+        WORKING DIRECTORY. In the container that is /app, root-owned from the
+        image build while the app runs as PUID:
+
+            [Errno 13] Permission denied: '/app/tmpXXXXXXXX.tmp'
+
+        Because the directory is passed explicitly, pinning tempfile.tempdir
+        does not help. The cwd itself has to be writable.
+        """
+        target = self.temp_dir()
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            os.chdir(target)
+            return target
+        except OSError:
+            return None
 
 
 config = Config()

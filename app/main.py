@@ -42,6 +42,15 @@ async def lifespan(_: FastAPI):
     downloader.start()
     log.info("Output dir: %s | Config dir: %s | Season mode: %s",
              config.OUTPUT_DIR, config.CONFIG_DIR, config.SEASON_MODE)
+    cwd = config.use_writable_cwd()
+    if cwd:
+        log.info("Scratch dir: %s (also the working directory)", cwd)
+    else:
+        log.warning(
+            "Scratch dir %s is not writable, so the working directory was left "
+            "as-is. Downloads may fail with \"Permission denied: "
+            "'/app/tmpXXXX.tmp'\" — check that %s is owned by %s:%s.",
+            config.temp_dir(), config.CONFIG_DIR, config.PUID, config.PGID)
     log.info("Email notifications: %s",
              "on" if config.email_ready() else "off (SMTP not configured)")
     yield

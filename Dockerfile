@@ -48,7 +48,7 @@ RUN set -eux; \
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-RUN mkdir -p /config /downloads
+RUN mkdir -p /config /downloads && chmod 1777 /tmp
 
 VOLUME ["/config", "/downloads"]
 EXPOSE 8080

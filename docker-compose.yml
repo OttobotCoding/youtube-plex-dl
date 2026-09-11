@@ -14,7 +14,7 @@ services:
       # on the array (it runs with WATCHTOWER_LABEL_ENABLE=true).
       com.centurylinklabs.watchtower.enable: "true"
 
-    # --- Unraid Docker tab cosmetics -------------------------------------
+      # --- Unraid Docker tab cosmetics -------------------------------------
       # Compose-managed containers take their icon and WebUI link from these
       # labels; unraid-template.xml is only read by the template installer.
       # ICON_URL must be reachable from the browser you view Unraid in.
@@ -22,7 +22,7 @@ services:
       net.unraid.docker.icon: "${ICON_URL:-http://[IP]:[PORT:8080]/static/icon.png}"
       net.unraid.docker.webui: "http://[IP]:[PORT:8080]/"
       net.unraid.docker.managed: "composeman"
-      
+
     # Everything host-specific comes from .env, so this file is identical on
     # your laptop and on Unraid. See .env.local.example / .env.unraid.example.
     ports:
