@@ -55,6 +55,12 @@ services:
       MERGE_FORMAT: "${MERGE_FORMAT:-mp4}"           # mp4 (best direct-play) or mkv
       MAX_HEIGHT: "${MAX_HEIGHT:-0}"                 # 0 = no cap; 360 is handy for testing
       CONCURRENCY: "${CONCURRENCY:-2}"
+      # How often the worker logs what each in-flight download is doing, and
+      # how long one phase may run before it's flagged as suspicious. An
+      # ffmpeg merge of a large file onto /mnt/user can legitimately take
+      # many minutes, so the warning is advisory, not a failure.
+      HEARTBEAT_SECONDS: "${HEARTBEAT_SECONDS:-60}"
+      STALL_WARN_SECONDS: "${STALL_WARN_SECONDS:-600}"
       EMBED_METADATA: "${EMBED_METADATA:-true}"
       EMBED_THUMBNAIL: "${EMBED_THUMBNAIL:-true}"
       WRITE_THUMBNAIL: "${WRITE_THUMBNAIL:-true}"

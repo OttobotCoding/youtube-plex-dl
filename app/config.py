@@ -57,6 +57,12 @@ class Config:
     MERGE_FORMAT = _str("MERGE_FORMAT", "mp4").lower()  # mp4 | mkv
     MAX_HEIGHT = _int("MAX_HEIGHT", 0)  # 0 = unlimited
     CONCURRENCY = max(1, _int("CONCURRENCY", 2))
+    # How often the worker heartbeat logs what each in-flight download is
+    # doing, and how long one phase may run before it is called out as
+    # suspicious. An ffmpeg merge of a 4K file onto /mnt/user can legitimately
+    # take many minutes, so the warning is advisory, not a failure.
+    HEARTBEAT_SECONDS = max(10, _int("HEARTBEAT_SECONDS", 60))
+    STALL_WARN_SECONDS = max(60, _int("STALL_WARN_SECONDS", 600))
     EMBED_METADATA = _bool("EMBED_METADATA", True)
     EMBED_THUMBNAIL = _bool("EMBED_THUMBNAIL", True)
     WRITE_THUMBNAIL = _bool("WRITE_THUMBNAIL", True)   # sidecar .jpg for Plex

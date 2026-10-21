@@ -27,6 +27,10 @@ _workers: list[threading.Thread] = []
 _started = False
 _state_lock = threading.Lock()
 _running: set[int] = set()
+# row_id -> (phase name, when that phase started). Postprocessing (ffmpeg
+# merge, metadata, thumbnail embed) reports no byte progress, so without this
+# a long merge looks identical to a hang: no log output, static UI.
+_phase: dict[int, tuple[str, float]] = {}
 _stop = threading.Event()
 
 
@@ -44,6 +48,7 @@ def start() -> None:
         t.start()
         _workers.append(t)
     threading.Thread(target=_notifier, name="ypd-notifier", daemon=True).start()
+    threading.Thread(target=_heartbeat, name="ypd-heartbeat", daemon=True).start()
     log.info("Download workers started (concurrency=%s)", config.CONCURRENCY)
 
 
@@ -92,15 +97,70 @@ def _worker() -> None:
             continue
         with _state_lock:
             _running.add(row_id)
+        _set_phase(row_id, "starting")
         try:
             _process(row_id)
         except Exception as exc:  # noqa: BLE001
             log.exception("Job %s crashed", row_id)
             db.update(row_id, status="failed", error=str(exc)[:500], progress=0)
         finally:
+            _clear_phase(row_id)
             with _state_lock:
                 _running.discard(row_id)
             _jobs.task_done()
+
+
+def _set_phase(row_id: int, name: str) -> None:
+    with _state_lock:
+        _phase[row_id] = (name, time.time())
+
+
+def _clear_phase(row_id: int) -> None:
+    with _state_lock:
+        _phase.pop(row_id, None)
+
+
+def _elapsed(seconds: float) -> str:
+    s = int(seconds)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    return f"{h}h{m:02d}m" if h else f"{m}m{sec:02d}s"
+
+
+def _heartbeat() -> None:
+    """Say something, every HEARTBEAT_SECONDS, about every in-flight job.
+
+    ffmpeg postprocessing emits no progress at all, so a 6GB merge onto a
+    FUSE share used to look exactly like a freeze. This logs what each worker
+    is doing and how long it has been doing it, and folds the elapsed time
+    into the queue row so the UI shows "merger 4m12s" rather than "merger".
+    """
+    while not _stop.is_set():
+        _stop.wait(config.HEARTBEAT_SECONDS)
+        if _stop.is_set():
+            break
+        with _state_lock:
+            snapshot = [(rid, _phase.get(rid)) for rid in sorted(_running)]
+        for row_id, phase in snapshot:
+            row = db.one("SELECT * FROM downloads WHERE id=?", (row_id,))
+            if row is None:
+                continue
+            name, started = phase if phase else ("working", time.time())
+            secs = time.time() - started
+            log.info("[%s] %s — %s for %s (%.1f%%)",
+                     row["video_id"], (row["title"] or "")[:60],
+                     name, _elapsed(secs), row["progress"] or 0)
+            if name != "downloading":
+                # Downloading already shows speed/ETA; postprocessing doesn't.
+                db.update(row_id, eta=f"{name} {_elapsed(secs)}"[:24])
+            if secs > config.STALL_WARN_SECONDS:
+                log.warning(
+                    "[%s] has been in '%s' for %s. If this is an ffmpeg merge "
+                    "it may just be slow — check with: docker exec %s ps aux | "
+                    "grep ffmpeg, and watch the .temp file grow next to the "
+                    "final filename. Large files onto /mnt/user are slow; "
+                    "MAX_HEIGHT=1080 and CONCURRENCY=1 both help.",
+                    row["video_id"], name, _elapsed(secs), "youtube-plex-dl")
 
 
 def _notifier() -> None:
@@ -136,6 +196,7 @@ def _process(row_id: int) -> None:
 
     db.update(row_id, status="downloading", progress=0, error=None,
               speed=None, eta="preparing")
+    _set_phase(row_id, "metadata")
 
     # 1. refresh metadata — flat playlist entries lack upload_date/description
     try:
@@ -179,6 +240,9 @@ def _process(row_id: int) -> None:
     outtmpl = str(season_dir / f"{stem}.%(ext)s")
     final_path: Optional[str] = None
     subs_dropped = False
+
+    log.info("[%s] starting — %s / %s", meta["video_id"], channel_name, code)
+    _set_phase(row_id, "downloading")
 
     attempts = [True, False] if config.SUBTITLES else [False]
     for attempt_no, want_subs in enumerate(attempts):
@@ -385,8 +449,10 @@ def _make_progress_hook(row_id: int):
 def _make_pp_hook(row_id: int):
     def hook(d: dict) -> None:
         if d.get("status") == "started":
-            name = (d.get("postprocessor") or "").replace("FFmpeg", "")
-            db.update(row_id, eta=(name or "processing").lower()[:24])
+            name = ((d.get("postprocessor") or "").replace("FFmpeg", "")
+                    or "processing").lower()[:24]
+            _set_phase(row_id, name)
+            db.update(row_id, eta=name)
     return hook
 
 
