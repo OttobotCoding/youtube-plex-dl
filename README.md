@@ -333,6 +333,15 @@ POST /forget/{video_id}
 
 ## Notes and caveats
 
+- **Subtitles are best-effort.** yt-dlp aborts the *entire* video if a subtitle
+  track fails to download, which auto-generated tracks do fairly often (they're
+  produced on demand and will 404 or rate-limit). Rather than loosen
+  `ignoreerrors` globally — which would swallow genuine failures too — a
+  subtitle-specific error triggers one automatic retry with subtitles off. The
+  video is kept, the partial download resumes rather than restarting, and the
+  log records `Saved <id> WITHOUT subtitles`. Grep for that line to find
+  episodes missing subs.
+
 - **Not tested against live YouTube in my sandbox** — outbound network to
   YouTube and the CDNs is blocked here. URL classification, episode allocation
   and collision handling, path building, NFO generation, email rendering, every

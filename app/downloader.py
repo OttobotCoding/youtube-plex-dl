@@ -167,23 +167,54 @@ def _process(row_id: int) -> None:
     )
 
     # 3. download
+    #
+    # Subtitles are best-effort. yt-dlp raises DownloadError and abandons the
+    # WHOLE video if a subtitle track fails, because ignoreerrors is False
+    # (YoutubeDL.process_info: `if self.params.get('ignoreerrors') is not True:
+    # raise DownloadError(msg)`). Auto-generated tracks are produced on demand
+    # and 404 or rate-limit fairly often, so one bad .srt would throw away a
+    # perfectly good video. Setting ignoreerrors=True would fix that by
+    # swallowing every real error too, so instead: on a subtitle-specific
+    # failure, retry this video once with subtitles switched off.
     outtmpl = str(season_dir / f"{stem}.%(ext)s")
-    opts = _download_opts(outtmpl, row_id)
     final_path: Optional[str] = None
-    try:
-        with YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(meta["url"], download=True)
-        final_path = _resolve_path(info, season_dir, stem)
-    except Exception as exc:  # noqa: BLE001
-        db.update(row_id, status="failed", progress=0, speed=None, eta=None,
-                  error=ytdlp_service._clean(str(exc)))
-        _cleanup_partials(season_dir, stem)
-        return
+    subs_dropped = False
+
+    attempts = [True, False] if config.SUBTITLES else [False]
+    for attempt_no, want_subs in enumerate(attempts):
+        try:
+            opts = _download_opts(outtmpl, row_id, with_subtitles=want_subs)
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(meta["url"], download=True)
+            final_path = _resolve_path(info, season_dir, stem)
+            subs_dropped = config.SUBTITLES and not want_subs
+            break
+        except Exception as exc:  # noqa: BLE001
+            is_last = attempt_no == len(attempts) - 1
+            if not is_last and _is_subtitle_error(exc):
+                log.warning(
+                    "Subtitles failed for %s (%s) — retrying without them",
+                    meta["video_id"], ytdlp_service._clean(str(exc)),
+                )
+                # Deliberately NOT cleaning partials here: continuedl resumes
+                # the half-finished video instead of starting it again.
+                db.update(row_id, eta="retrying without subs")
+                continue
+            db.update(row_id, status="failed", progress=0, speed=None, eta=None,
+                      error=ytdlp_service._clean(str(exc)))
+            _cleanup_partials(season_dir, stem)
+            return
 
     if not final_path or not Path(final_path).exists():
         db.update(row_id, status="failed",
                   error="Download finished but the output file was not found.")
         return
+
+    # A failed subtitle attempt can leave a stray .srt.part behind.
+    _cleanup_partials(season_dir, stem)
+    if subs_dropped:
+        log.warning("Saved %s WITHOUT subtitles (they could not be fetched)",
+                    meta["video_id"])
 
     size = Path(final_path).stat().st_size
 
@@ -223,7 +254,23 @@ def _format_selector() -> str:
     return f"bestvideo{height}+bestaudio/best{height}/best"
 
 
-def _download_opts(outtmpl: str, row_id: int) -> dict[str, Any]:
+def _is_subtitle_error(exc: BaseException) -> bool:
+    """Was this failure caused by subtitles rather than the video itself?
+
+    yt-dlp's own wording, from YoutubeDL.process_info:
+        Unable to download video subtitles for 'en': ...
+        Cannot write video subtitles file ...
+    """
+    msg = str(exc).lower()
+    return "subtitle" in msg and (
+        "unable to download" in msg
+        or "cannot write" in msg
+        or "unable to write" in msg
+    )
+
+
+def _download_opts(outtmpl: str, row_id: int, with_subtitles: bool = True) -> dict[str, Any]:
+    subs_on = config.SUBTITLES and with_subtitles
     postprocessors: list[dict[str, Any]] = []
     if config.SPONSORBLOCK:
         postprocessors.append({"key": "SponsorBlock", "when": "after_filter"})
@@ -234,7 +281,7 @@ def _download_opts(outtmpl: str, row_id: int) -> dict[str, Any]:
     if config.EMBED_METADATA:
         postprocessors.append({"key": "FFmpegMetadata", "add_metadata": True,
                                "add_chapters": True})
-    if config.SUBTITLES and config.EMBED_SUBTITLES:
+    if subs_on and config.EMBED_SUBTITLES:
         postprocessors.append({"key": "FFmpegEmbedSubtitle",
                                "already_have_subtitle": config.WRITE_SUBTITLE_FILES})
     if config.EMBED_THUMBNAIL:
@@ -247,8 +294,11 @@ def _download_opts(outtmpl: str, row_id: int) -> dict[str, Any]:
         "merge_output_format": config.MERGE_FORMAT,
         "final_ext": config.MERGE_FORMAT,
         "writethumbnail": config.WRITE_THUMBNAIL or config.EMBED_THUMBNAIL,
-        "writesubtitles": config.SUBTITLES,
-        "writeautomaticsub": config.SUBTITLES and config.SUBTITLE_AUTO,
+        "writesubtitles": subs_on,
+        "writeautomaticsub": subs_on and config.SUBTITLE_AUTO,
+        # Auto-generated tracks are produced on demand and are the ones that
+        # most often 429 or 404; a small pause between them cuts that down.
+        "sleep_interval_subtitles": 1,
         "subtitleslangs": [s.strip() for s in config.SUBTITLE_LANGS.split(",") if s.strip()],
         "subtitlesformat": "srt/best",
         "postprocessors": postprocessors,
@@ -275,7 +325,7 @@ def _download_opts(outtmpl: str, row_id: int) -> dict[str, Any]:
         "postprocessor_args": {"thumbnailsconvertor+ffmpeg_o": ["-c:v", "mjpeg", "-vf",
                                                                 "crop=ih*16/9:ih"]},
     }
-    if config.SUBTITLES and config.WRITE_SUBTITLE_FILES:
+    if subs_on and config.WRITE_SUBTITLE_FILES:
         # Convert whatever YouTube hands us into .srt, which Plex reads happily.
         opts["postprocessors"].insert(0, {"key": "FFmpegSubtitlesConvertor",
                                           "format": "srt"})
